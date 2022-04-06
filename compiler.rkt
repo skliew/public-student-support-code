@@ -77,9 +77,44 @@
   (match p
     [(Program info e) (Program info ((uniquify-exp '()) e))]))
 
+(define (rco-atom arg)
+  (match arg
+    [(Prim op es)
+     (let ([name (my-gensym 'tmp)]
+           [binding (rco-exp arg)])
+       (cons arg (cons name binding)))]
+    [else (cons arg '())]))
+
+(define (add-arg e arg)
+  (match e
+    [(Prim op es)
+     (begin
+       (Prim op (append es (list arg))))]))
+
+(define (add-arg-with-binding e arg)
+  (match e
+    [(Prim op es)
+     (let ([name (car arg)]
+           [binding (cdr arg)])
+       (Let name binding (Prim op (append es (list (Var name))))))]))
+
+(define (rco-exp e)
+  (match e
+    [(Prim op es)
+     (let ([rco-atom-pairs (for/list ([arg es]) (rco-atom arg))]
+           [org-exp (Prim op '())])
+       (foldl (lambda (pair exp)
+                (let ([arg (car pair)]
+                      [binding (cdr pair)])
+                  (if (empty? binding)
+                    (add-arg exp arg)
+                    (add-arg-with-binding exp binding)))) (Prim op '()) rco-atom-pairs))]
+    [else e]))
+
 ;; remove-complex-opera* : R1 -> R1
 (define (remove-complex-opera* p)
-  (error "TODO: code goes here (remove-complex-opera*)"))
+  (match p
+    [(Program info e) (Program info (rco-exp e))]))
 
 ;; explicate-control : R1 -> C0
 (define (explicate-control p)
@@ -107,7 +142,7 @@
 (define compiler-passes
   `( ("uniquify" ,uniquify ,interp-Lvar)
      ;; Uncomment the following passes as you finish them.
-     ;; ("remove complex opera*" ,remove-complex-opera* ,interp-Lvar)
+     ("remove complex opera*" ,remove-complex-opera* ,interp-Lvar)
      ;; ("explicate control" ,explicate-control ,interp-Cvar)
      ;; ("instruction selection" ,select-instructions ,interp-x86-0)
      ;; ("assign homes" ,assign-homes ,interp-x86-0)
